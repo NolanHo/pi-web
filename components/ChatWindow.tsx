@@ -80,8 +80,7 @@ function getUserInputText(message: AgentMessage): string | null {
     return text.length > 0 ? text : null;
   }
   const text = message.content
-    .filter((block) => block.type === "text")
-    .map((block) => block.text)
+    .flatMap((block) => block.type === "text" ? [block.text] : [])
     .join("\n")
     .trim();
   return text.length > 0 ? text : null;

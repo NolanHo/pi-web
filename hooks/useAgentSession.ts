@@ -1639,7 +1639,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   // (this only ever increases scrollTop), so a per-token call here must not
   // refresh a time window that would swallow the user's own scroll-up events.
   const scrollLiveToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "instant" });
+    messagesEndRef.current?.scrollIntoView({ behavior: "instant" as ScrollBehavior });
   }, []);
 
   const scrollUserMsgToTop = useCallback(() => {
@@ -1768,7 +1768,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         scrollUserMsgToTop();
       } else if (!initialScrollDoneRef.current) {
         initialScrollDoneRef.current = true;
-        scrollToBottom("instant");
+        scrollToBottom("instant" as ScrollBehavior);
       } else if (!agentRunningRef.current && completionScrollAllowedRef.current) {
         scrollToBottom("smooth");
       }

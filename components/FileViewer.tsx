@@ -1228,9 +1228,7 @@ function TextFileViewer({ filePath, cwd, sourceSessionId, onOpenFile, onMentionL
                 overflowWrap: wrapLines ? "anywhere" : "normal",
               },
             }}
-            renderer={(rendererProps) => (
-              <SourceCodeRenderer {...rendererProps} wrapLines={wrapLines} />
-            )}
+            renderer={(rendererProps) => SourceCodeRenderer({ ...rendererProps, wrapLines })}
             wrapLongLines={wrapLines}
           >
             {content}

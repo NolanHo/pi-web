@@ -27,6 +27,13 @@ export async function GET(
     }
   }
 
+  // After the lookup/restart block, session is non-null (startRpcSession threw on failure).
+  // Bind to a const so the closure below narrows it; TS won't narrow a `let` inside a closure.
+  if (!session) {
+    return new Response("Session unavailable", { status: 500 });
+  }
+  const activeSession = session;
+
   const stream = new ReadableStream({
     start(controller) {
       const encode = (data: unknown) => {
@@ -37,7 +44,7 @@ export async function GET(
       // Send initial connected event
       encode({ type: "connected", sessionId: id });
 
-      const unsubscribe = session.onEvent((event) => {
+      const unsubscribe = activeSession.onEvent((event) => {
         encode(event);
       });
 

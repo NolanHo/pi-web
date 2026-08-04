@@ -144,8 +144,7 @@ function getAssistantResult(agent: Agent, historyLength: number): GeneratedSessi
       throw new Error(message.errorMessage || "The title model request failed");
     }
     const text = message.content
-      .filter((block) => block.type === "text")
-      .map((block) => block.text)
+      .flatMap((block) => block.type === "text" ? [block.text] : [])
       .join("\n")
       .trim();
     if (!text) continue;

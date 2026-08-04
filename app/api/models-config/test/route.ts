@@ -20,8 +20,7 @@ function errorMessage(error: unknown): string {
 
 function getAssistantText(message: AssistantMessage): string {
   return message.content
-    .filter((block) => block.type === "text")
-    .map((block) => block.text)
+    .map((block) => block.type === "text" ? block.text : "")
     .join("");
 }
 

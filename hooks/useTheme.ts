@@ -2,6 +2,13 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 
+type ViewTransitionDocument = Document & {
+  startViewTransition?: (callback: () => void) => {
+    ready: Promise<void>;
+    finished: Promise<void>;
+  };
+};
+
 type Theme = "light" | "dark";
 
 const listeners = new Set<() => void>();
@@ -45,7 +52,7 @@ export function useTheme() {
     };
 
     const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    const supportsVT = typeof document.startViewTransition === "function";
+    const supportsVT = typeof (document as ViewTransitionDocument).startViewTransition === "function";
 
     if (!supportsVT || reduceMotion) {
       apply();
@@ -59,7 +66,7 @@ export function useTheme() {
       Math.max(y, window.innerHeight - y),
     );
 
-    const transition = document.startViewTransition(apply);
+    const transition = (document as ViewTransitionDocument).startViewTransition!(apply);
     transition.ready
       .then(() => {
         document.documentElement.animate(
