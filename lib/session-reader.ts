@@ -14,6 +14,16 @@ import { resolveProject, type ProjectInfo } from "./worktree";
 
 export { getAgentDir };
 
+// pi's SessionManager returns Invalid Date for sessions whose header lacks a
+// timestamp (legacy version-3 test stubs). `instanceof Date` is true for those,
+// so toISOString() throws RangeError. Fall back to the file mtime, then null.
+function toSafeISO(value: Date | string | undefined): string | null {
+  if (value instanceof Date) {
+    return isNaN(value.getTime()) ? null : value.toISOString();
+  }
+  return value ? String(value) : null;
+}
+
 async function loadAllSessions(): Promise<SessionInfo[]> {
   const piSessions: PiSessionInfo[] = await SessionManager.listAll();
   const pathToId = new Map<string, string>();
@@ -35,8 +45,8 @@ async function loadAllSessions(): Promise<SessionInfo[]> {
       id: s.id,
       cwd: s.cwd,
       name: s.name,
-      created: s.created instanceof Date ? s.created.toISOString() : String(s.created),
-      modified: s.modified instanceof Date ? s.modified.toISOString() : String(s.modified),
+      created: toSafeISO(s.created),
+      modified: toSafeISO(s.modified),
       messageCount: s.messageCount,
       firstMessage: s.firstMessage || "(no messages)",
       parentSessionId: s.parentSessionPath ? pathToId.get(sessionPathKey(s.parentSessionPath)) : undefined,

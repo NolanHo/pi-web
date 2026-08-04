@@ -156,9 +156,10 @@ function getRecentProjects(sessions: SessionInfo[]): string[] {
   for (const s of sessions) {
     const root = s.projectRoot ?? s.cwd;
     if (!root) continue;
+    const m = s.modified ?? "";
     const prev = latestByRoot.get(root);
-    if (!prev || s.modified > prev) {
-      latestByRoot.set(root, s.modified);
+    if (!prev || m > prev) {
+      latestByRoot.set(root, m);
     }
   }
   return [...latestByRoot.entries()]
@@ -285,9 +286,9 @@ function buildSessionTree(sessions: SessionInfo[]): SessionTreeNode[] {
     }
   }
 
-  // Sort each level by modified desc
+  // Sort each level by modified desc (empty/unknown sorts last)
   const sort = (nodes: SessionTreeNode[]) => {
-    nodes.sort((a, b) => b.session.modified.localeCompare(a.session.modified));
+    nodes.sort((a, b) => (b.session.modified ?? "").localeCompare(a.session.modified ?? ""));
     nodes.forEach((n) => sort(n.children));
   };
   sort(roots);
@@ -1974,7 +1975,7 @@ function SessionItem({
               ) : isUnread ? (
                 <UnreadSessionIndicator />
               ) : (
-                <span title={session.modified}>{formatRelativeTime(session.modified)}</span>
+                <span title={session.modified ?? ""}>{session.modified ? formatRelativeTime(session.modified) : "—"}</span>
               )}
               <span>{t("sidebar.messagesCount", { count: session.messageCount })}</span>
               {session.worktreeBranch && (

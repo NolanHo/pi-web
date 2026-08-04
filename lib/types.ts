@@ -287,8 +287,8 @@ export interface SessionInfo {
   id: string;
   cwd: string;
   name?: string;
-  created: string;
-  modified: string;
+  created: string | null;
+  modified: string | null;
   messageCount: number;
   firstMessage: string;
   parentSessionId?: string; // set if this session was forked from another
