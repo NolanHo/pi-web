@@ -114,8 +114,8 @@ export function compressedResponse(
 }
 
 /** Zero-copy view of a Node Buffer as a Uint8Array acceptable as a Response body. */
-function toResponseBody(buf: Buffer): Uint8Array {
-  return new Uint8Array(buf.buffer as ArrayBuffer, buf.byteOffset, buf.byteLength);
+function toResponseBody(buf: Buffer): BodyInit {
+  return new Uint8Array(buf.buffer as ArrayBuffer, buf.byteOffset, buf.byteLength) as unknown as BodyInit;
 }
 
 /** Drop-in for `Response.json` / `NextResponse.json` with negotiated compression. */
