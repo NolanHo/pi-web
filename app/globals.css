@@ -841,6 +841,15 @@ span.linenumber {
   to   { stroke-dashoffset: 0;  opacity: 1; }
 }
 
+/* content-visibility: skip rendering off-screen messages for perf.
+   `auto` keyword remembers last rendered size so layout (and the minimap)
+   stays accurate after first paint; 220px is a reasonable fallback for
+   never-yet-rendered messages. */
+.cv-message {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 220px;
+}
+
 /* Desktop sidebar: animate width */
 @media (min-width: 641px) {
   .sidebar-overlay-backdrop {

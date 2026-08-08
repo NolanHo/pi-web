@@ -231,6 +231,33 @@ export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreate
   const sentinelRef = useRef<HTMLDivElement>(null);
   const prevScrollDistanceRef = useRef<number | null>(null);
 
+  // --- Scroll-to-bottom floating button ---
+  // Show a button when the user has scrolled away from the bottom.
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const SCROLL_BOTTOM_THRESHOLD = 80;
+    const onScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      setShowScrollToBottom(scrollHeight - scrollTop - clientHeight > SCROLL_BOTTOM_THRESHOLD);
+    };
+    onScroll();
+    container.addEventListener("scroll", onScroll, { passive: true });
+    // Re-check after messages change (height may have grown)
+    const ro = new ResizeObserver(onScroll);
+    ro.observe(container);
+    if (container.firstElementChild) ro.observe(container.firstElementChild);
+    return () => {
+      container.removeEventListener("scroll", onScroll);
+      ro.disconnect();
+    };
+  }, [scrollContainerRef, messages.length, streamState.isStreaming]);
+
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
+    scrollContainerRef.current?.scrollTo({ top: scrollContainerRef.current.scrollHeight, behavior });
+  }, [scrollContainerRef]);
+
   // IntersectionObserver on the sentinel div at the top of the message list.
   // When it becomes visible, load the next page of older messages.
   useEffect(() => {
@@ -583,9 +610,15 @@ export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreate
                     onRespondAskUser={respondAskUser}
                   />
                 );
-                if (!isVisible || options.attachRef === false || currentRefIdx === undefined) return view;
+                if (!isVisible || options.attachRef === false || currentRefIdx === undefined) {
+                  return (
+                    <div key={`${keyPrefix}-${idx}`} className="cv-message">
+                      {view}
+                    </div>
+                  );
+                }
                 return (
-                  <div key={`${keyPrefix}-${idx}`} ref={attachVisibleRef(idx, currentRefIdx)}>
+                  <div key={`${keyPrefix}-${idx}`} ref={attachVisibleRef(idx, currentRefIdx)} className="cv-message">
                     {view}
                   </div>
                 );
@@ -658,6 +691,7 @@ export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreate
                   rendered.push(
                     <div
                       key={`process-group-${userIdx}-${finalAssistantIdx}`}
+                      className="cv-message"
                       ref={processRefIdx === undefined ? undefined : (el) => { messageRefs.current[processRefIdx] = el; }}
                     >
                       {processGroup}
@@ -728,6 +762,39 @@ export function ChatWindow({ session, newSessionCwd, onAgentEnd, onSessionCreate
             scrollContainer={scrollContainerRef}
             messageRefs={messageRefs}
           />
+        )}
+
+        {showScrollToBottom && (
+          <button
+            type="button"
+            aria-label={t("chat.scrollToBottom")}
+            title={t("chat.scrollToBottom")}
+            onClick={() => scrollToBottom("smooth")}
+            style={{
+              position: "absolute",
+              bottom: 12,
+              right: isMobile ? 16 : CHAT_MINIMAP_WIDTH + 16,
+              zIndex: 35,
+              width: 36,
+              height: 36,
+              borderRadius: "50%",
+              border: "1px solid var(--border)",
+              background: "var(--bg-panel)",
+              color: "var(--text-muted)",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.12)",
+              transition: "color 0.15s, background 0.15s",
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; e.currentTarget.style.background = "var(--bg-hover)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-muted)"; e.currentTarget.style.background = "var(--bg-panel)"; }}
+          >
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="4.5 7 9 11.5 13.5 7" />
+            </svg>
+          </button>
         )}
       </div>
 
