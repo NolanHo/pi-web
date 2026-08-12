@@ -11,6 +11,7 @@ import type {
 } from "@/lib/types";
 import { normalizeToolCalls } from "@/lib/normalize";
 import { sendAgentCommand } from "@/lib/agent-client";
+import { fetchSessionData } from "@/lib/session-prefetch";
 import { getToolNamesForPreset, type ToolEntry } from "@/lib/tool-presets";
 import type { SessionStatsInfo } from "@/lib/pi-types";
 
@@ -164,6 +165,9 @@ const PROMPT_SETTLE_POLL_MS = 600;
 const PROMPT_SETTLE_MAX_MS = 20_000;
 const AGENT_STATE_RECONCILE_MS = 15_000;
 const BASH_STATE_RECONCILE_MS = 1_000;
+// Streaming message_update events arrive at token frequency; merge them to
+// this cadence before dispatching, so the render tree is not rebuilt per token.
+const STREAM_UPDATE_THROTTLE_MS = 100;
 const EVENT_STREAM_CONNECT_TIMEOUT_MS = 5_000;
 const MAX_NOTICES = 5;
 const NOTICE_VISIBLE_MS = 5000;
@@ -437,6 +441,26 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   const bashRunningRef = useRef(false);
   const bashRecoveryIdRef = useRef(0);
   const handleAgentEventRef = useRef<((event: AgentEvent) => void) | null>(null);
+
+  // ---- Streaming update throttling ----
+  // message_update arrives at token frequency (tens per second for fast
+  // models); dispatching every one re-renders the whole chat tree each time.
+  // Merge them to ~STREAM_UPDATE_THROTTLE_MS intervals: the latest message is
+  // kept in a ref and dispatched on a timer, and any non-update event flushes
+  // it so the final frame is never dropped.
+  const pendingStreamingRef = useRef<Partial<AgentMessage> | null>(null);
+  const streamThrottleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flushStreamingUpdate = useCallback(() => {
+    if (streamThrottleTimerRef.current) {
+      clearTimeout(streamThrottleTimerRef.current);
+      streamThrottleTimerRef.current = null;
+    }
+    if (pendingStreamingRef.current) {
+      const msg = pendingStreamingRef.current;
+      pendingStreamingRef.current = null;
+      dispatch({ type: "update", message: normalizeToolCalls(msg as AgentMessage) });
+    }
+  }, []);
   const initialScrollDoneRef = useRef(false);
   const lastUserMsgRef = useRef<HTMLDivElement | null>(null);
   const pendingScrollToUserRef = useRef(false);
@@ -501,10 +525,19 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
 
   const loadSession = useCallback(async (sid: string, showLoading = false, includeState = false) => {
     let messagesLoaded = false;
+    // Independent of the context payload — start it early so it flies in
+    // parallel instead of adding a serial round-trip after the (larger) fetch.
+    const statePromise = includeState
+      ? fetch(`/api/sessions/${encodeURIComponent(sid)}/state`)
+          .then(async (r) => {
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            return (await r.json()) as { running: boolean; state?: AgentStateResponse };
+          })
+          .catch(() => null)
+      : null;
     try {
       if (showLoading) setLoading(true);
-      const params = new URLSearchParams({ deferThinking: "1", deferMedia: "1" });
-      const res = await fetch(`/api/sessions/${encodeURIComponent(sid)}?${params}`);
+      const res = await fetchSessionData(sid);
       if (res.status === 404) {
         if (showLoading) {
           setData(null);
@@ -537,9 +570,8 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       if (!includeState) return null;
 
       try {
-        const stateRes = await fetch(`/api/sessions/${encodeURIComponent(sid)}/state`);
-        if (!stateRes.ok) throw new Error(`HTTP ${stateRes.status}`);
-        const agentState = await stateRes.json() as { running: boolean; state?: AgentStateResponse };
+        const agentState = await statePromise;
+        if (!agentState) throw new Error("state fetch failed");
         if (sessionIdRef.current !== sid) return null;
 
         const liveState = agentState.state;
@@ -993,6 +1025,11 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
   }, [agentRunning]);
 
   const handleAgentEvent = useCallback((event: AgentEvent) => {
+    // Any event other than a streaming update (message_start, tool switch,
+    // termination, ...) must surface the latest throttled frame immediately.
+    if (event.type !== "message_update") {
+      flushStreamingUpdate();
+    }
     switch (event.type) {
       case "agent_start":
         agentRunningRef.current = true;
@@ -1050,7 +1087,16 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
           break;
         }
         if (msg) {
-          dispatch({ type: "update", message: normalizeToolCalls(msg as AgentMessage) });
+          // Throttle: merge token-frequency updates, dispatch the latest one
+          // at most every STREAM_UPDATE_THROTTLE_MS. Terminal events flush via
+          // flushStreamingUpdate at the top of handleAgentEvent.
+          pendingStreamingRef.current = msg;
+          if (!streamThrottleTimerRef.current) {
+            streamThrottleTimerRef.current = setTimeout(() => {
+              streamThrottleTimerRef.current = null;
+              flushStreamingUpdate();
+            }, STREAM_UPDATE_THROTTLE_MS);
+          }
         }
         setAgentPhase(null);
         break;
@@ -1155,7 +1201,7 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
         handleExtensionUiRequest(event as ExtensionUiRequest);
         break;
     }
-  }, [addNotice, finishPromptWithoutStream, handleExtensionUiRequest, loadSession, onAgentEnd]);
+  }, [addNotice, finishPromptWithoutStream, flushStreamingUpdate, handleExtensionUiRequest, loadSession, onAgentEnd]);
   handleAgentEventRef.current = handleAgentEvent;
 
   const handleSend = useCallback(async (message: string, images?: AttachedImage[]) => {
@@ -1725,6 +1771,11 @@ export function useAgentSession(opts: UseAgentSessionOptions) {
       bashRecoveryIdRef.current += 1;
       eventSourceRef.current?.close();
       eventSourceRef.current = null;
+      if (streamThrottleTimerRef.current) {
+        clearTimeout(streamThrottleTimerRef.current);
+        streamThrottleTimerRef.current = null;
+      }
+      pendingStreamingRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

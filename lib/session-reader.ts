@@ -9,6 +9,7 @@ import { normalize as normalizePath } from "path";
 import type { AgentMessage, SessionEntry, SessionHeader, SessionInfo, SessionContext } from "./types";
 import type { SessionEntry as PiSessionEntry, SessionInfo as PiSessionInfo } from "@earendil-works/pi-coding-agent";
 import { normalizeToolCalls } from "./normalize";
+import { flushProjectCache, scanSessionInfos } from "./session-scan";
 import { sessionPathKey } from "./session-path";
 import { resolveProject, type ProjectInfo } from "./worktree";
 
@@ -25,7 +26,7 @@ function toSafeISO(value: Date | string | undefined): string | null {
 }
 
 async function loadAllSessions(): Promise<SessionInfo[]> {
-  const piSessions: PiSessionInfo[] = await SessionManager.listAll();
+  const piSessions: PiSessionInfo[] = await scanSessionInfos();
   const pathToId = new Map<string, string>();
   for (const s of piSessions) pathToId.set(sessionPathKey(s.path), s.id);
 
@@ -36,6 +37,9 @@ async function loadAllSessions(): Promise<SessionInfo[]> {
   await Promise.all(uniqueCwds.map(async (cwd) => {
     projectByCwd.set(cwd, await resolveProject(cwd));
   }));
+  // Persist any git resolutions that were missing/expired on disk so process
+  // restarts don't re-spawn git for every cwd.
+  flushProjectCache();
 
   return piSessions.map((s) => {
     cacheSessionPath(s.id, s.path);

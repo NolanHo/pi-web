@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, type MouseEvent } from "react";
-import ReactMarkdown from "react-markdown";
+import { memo, useMemo, type MouseEvent } from "react";
+import ReactMarkdown, { type Components } from "react-markdown";
 import { resolveLocalFileHref } from "@/lib/file-links";
 import { encodeFilePathForApi } from "@/lib/file-paths";
 import { markdownRehypePlugins, markdownRemarkPlugins, normalizeDisplayMath } from "@/lib/markdown";
@@ -15,15 +15,13 @@ interface MarkdownBodyProps {
   onOpenFile?: (filePath: string) => void;
 }
 
-export function MarkdownBody({ children, className, isStreaming, cwd, onOpenFile }: MarkdownBodyProps) {
+export const MarkdownBody = memo(function MarkdownBody({ children, className, isStreaming, cwd, onOpenFile }: MarkdownBodyProps) {
   const normalizedMarkdown = useMemo(() => normalizeDisplayMath(children), [children]);
 
-  return (
-    <div className={["markdown-body", className].filter(Boolean).join(" ")}>
-      <ReactMarkdown
-        remarkPlugins={markdownRemarkPlugins}
-        rehypePlugins={markdownRehypePlugins}
-        components={{
+  // Stable reference across renders while its inputs are unchanged, so
+  // ReactMarkdown's subtree (incl. SyntaxHighlighter) is not rebuilt when a
+  // parent re-renders for unrelated reasons (e.g. streaming state updates).
+  const components = useMemo<Components>(() => ({
           code({ className, children, ...props }) {
             const lang = className?.replace("language-", "").toLowerCase() ?? "";
             const raw = String(children);
@@ -91,10 +89,17 @@ export function MarkdownBody({ children, className, isStreaming, cwd, onOpenFile
               </div>
             );
           },
-        }}
+        }), [cwd, onOpenFile, isStreaming]);
+
+  return (
+    <div className={["markdown-body", className].filter(Boolean).join(" ")}>
+      <ReactMarkdown
+        remarkPlugins={markdownRemarkPlugins}
+        rehypePlugins={markdownRehypePlugins}
+        components={components}
       >
         {normalizedMarkdown}
       </ReactMarkdown>
     </div>
   );
-}
+});

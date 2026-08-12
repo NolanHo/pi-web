@@ -30,20 +30,20 @@ type AskUserDialogRequest = Extract<
   { method: "select" | "confirm" | "input" | "editor" }
 >;
 
-interface ActiveAskUser {
+export interface ActiveAskUser {
   toolCallId: string;
   request: AskUserDialogRequest;
   answers: Record<number, string>;
 }
 
-interface LiveToolExecution {
+export interface LiveToolExecution {
   toolCallId: string;
   toolName: string;
   startedAt: number;
   partialResult?: string;
 }
 
-type AskUserRespond = (
+export type AskUserRespond = (
   request: AskUserDialogRequest,
   response: AskUserResponse,
   questionIndex: number,

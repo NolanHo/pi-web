@@ -18,6 +18,7 @@ import { useIsMobile } from "@/hooks/useIsMobile";
 import { copyText } from "@/lib/clipboard";
 import { getFileName } from "@/lib/file-paths";
 import { buildAtMentionText, buildFileAtMentionsText, buildFileLineMentionText } from "@/lib/file-fuzzy";
+import { fetchSessionData } from "@/lib/session-prefetch";
 import { getInitialNavigation } from "@/lib/initial-navigation";
 import type { SessionInfo, SessionTreeNode } from "@/lib/types";
 import type { ProjectTrustStatus } from "@/lib/api-types";
@@ -196,6 +197,16 @@ export function AppShell() {
   const [initialSessionRestored, setInitialSessionRestored] = useState<boolean>(() => !initialSessionId);
   // Suppresses sessionKey bump in handleCwdChange during the initial URL restore
   const suppressCwdBumpRef = useRef(false);
+
+  // Fire the session context request immediately on deep links so it runs in
+  // parallel with the (previously gating) session-list fetch. useAgentSession
+  // reuses the in-flight request via fetchSessionData().
+  useEffect(() => {
+    if (!initialSessionId) return;
+    void fetchSessionData(initialSessionId).catch(() => {
+      // Prefetch is best-effort; the real consumer handles errors.
+    });
+  }, [initialSessionId]);
 
   useEffect(() => {
     const requestedCwd = initialNavigation.requestedCwd;

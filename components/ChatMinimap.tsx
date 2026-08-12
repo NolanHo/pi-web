@@ -114,12 +114,20 @@ export function ChatMinimap({ messages, streamingMessage, scrollContainer, messa
       const newNodes: NodeInfo[] = [];
       let refIndex = 0;
       const allMessages = allMessagesRef.current;
+      // refs 数组与 user/assistant 消息顺序对齐，仅渲染窗口内的消息有 ref。
+      // 用 measuring 标志跳过未渲染的头部消息（其前必无 ref），把迭代范围
+      // 收窄到已渲染窗口，避免长会话下每次都全量遍历。
+      let measuring = false;
 
       for (let i = 0; i < allMessages.length; i++) {
         const msg = allMessages[i];
         if (msg.role !== "user" && msg.role !== "assistant") continue;
         const el = refs?.[refIndex];
         refIndex++;
+        if (!measuring) {
+          if (!el) continue;
+          measuring = true;
+        }
         if (!hasTextContent(msg)) continue;
         if (el) {
           const elRect = el.getBoundingClientRect();

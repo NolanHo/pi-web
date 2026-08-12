@@ -3,6 +3,12 @@ import { existsSync, mkdirSync, realpathSync } from "fs";
 import { basename, dirname, join, resolve } from "path";
 import { promisify } from "util";
 import { allowFileRoot } from "./allowed-roots";
+import {
+  getProjectCache as getDiskProjectCache,
+  markProjectCacheDirty,
+  invalidateProjectCacheFile,
+  PROJECT_CACHE_TTL_MS as DISK_PROJECT_CACHE_TTL_MS,
+} from "./session-scan";
 
 const execFileAsync = promisify(execFile);
 
@@ -46,6 +52,9 @@ function getProjectCache(): Map<string, { info: ProjectInfo; expiresAt: number }
 
 export function invalidateProjectCache(): void {
   globalThis.__piProjectCache?.clear();
+  // Worktree topology changed — drop the disk cache too so the next process
+  // restart re-resolves from git instead of stale disk entries.
+  invalidateProjectCacheFile();
 }
 
 async function git(cwd: string, args: string[]): Promise<string> {
@@ -77,6 +86,22 @@ export async function resolveProject(cwd: string): Promise<ProjectInfo> {
   const cache = getProjectCache();
   const cached = cache.get(cwd);
   if (cached && cached.expiresAt > Date.now()) return cached.info;
+
+  // Memory miss: seed from the disk-persisted project cache (see session-scan).
+  // A fresh disk entry avoids spawning git (~40ms per spawn in the Next server
+  // process; ~90 cwds add up to seconds after every restart).
+  const diskCache = await getDiskProjectCache();
+  const diskEntry = diskCache.get(cwd);
+  if (diskEntry && Date.now() - diskEntry.ts < DISK_PROJECT_CACHE_TTL_MS) {
+    const info: ProjectInfo = {
+      projectRoot: diskEntry.projectRoot,
+      branch: diskEntry.branch,
+      isWorktree: diskEntry.isWorktree,
+      isTopLevel: diskEntry.isTopLevel,
+    };
+    cache.set(cwd, { info, expiresAt: Date.now() + PROJECT_CACHE_TTL_MS });
+    return info;
+  }
 
   let info: ProjectInfo;
   try {
@@ -112,6 +137,17 @@ export async function resolveProject(cwd: string): Promise<ProjectInfo> {
   }
 
   cache.set(cwd, { info, expiresAt: Date.now() + PROJECT_CACHE_TTL_MS });
+  if (!diskEntry || diskEntry.projectRoot !== info.projectRoot || diskEntry.branch !== info.branch
+    || diskEntry.isWorktree !== info.isWorktree || diskEntry.isTopLevel !== info.isTopLevel) {
+    diskCache.set(cwd, {
+      projectRoot: info.projectRoot,
+      branch: info.branch,
+      isWorktree: info.isWorktree,
+      isTopLevel: info.isTopLevel,
+      ts: Date.now(),
+    });
+    markProjectCacheDirty();
+  }
   return info;
 }
 

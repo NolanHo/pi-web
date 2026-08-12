@@ -850,6 +850,13 @@ span.linenumber {
   contain-intrinsic-size: auto 220px;
 }
 
+/* Session rows in the sidebar tree: skip off-screen layout/rendering for
+   projects with hundreds of sessions. 56px ≈ one row (title + meta). */
+.cv-session-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 56px;
+}
+
 /* Desktop sidebar: animate width */
 @media (min-width: 641px) {
   .sidebar-overlay-backdrop {
